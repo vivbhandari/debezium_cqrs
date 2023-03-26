@@ -1,0 +1,76 @@
+version: '3'
+services:
+  zookeeper:
+    image: debezium/zookeeper:1.2
+    hostname: zookeeper
+    ports:
+     - 2181:2181
+     - 2888:2888
+     - 3888:3888
+    networks:
+      - network1
+  kafka:
+    image: debezium/kafka:1.2
+    hostname: kafka
+    depends_on: 
+      - zookeeper
+    restart: on-failure
+    ports:
+     - 9092:9092
+    environment:
+     - ZOOKEEPER_CONNECT=zookeeper:2181
+     - CREATE_TOPICS=fullfillment.inventory.customers:1:1,fullfillment.inventory.orders:1:1,fullfillment.inventory.products_on_hand:1:1
+    networks:
+      - network1
+  postgres:
+    image: debezium/example-postgres:1.2
+    hostname: postgres
+    ports:
+     - 5432:5432
+    environment:
+     - POSTGRES_USER=postgres
+     - POSTGRES_PASSWORD=postgres
+    networks:
+      - network1
+  connect:
+    image: debezium/connect:1.2
+    hostname: connect
+    ports:
+     - 8083:8083
+    depends_on: 
+      - kafka
+    restart: on-failure
+    environment:
+     - BOOTSTRAP_SERVERS=kafka:9092
+     - GROUP_ID=1
+     - CONFIG_STORAGE_TOPIC=my_connect_configs
+     - OFFSET_STORAGE_TOPIC=my_connect_offsets
+     - STATUS_STORAGE_TOPIC=my_connect_statuses
+    networks:
+      - network1
+  mongo:
+    image: mongo:latest
+    hostname: mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    networks:
+      - network1
+  consumer:
+    image: vivekbhandari/debezium-consumer:latest
+    hostname: consumer
+    depends_on: 
+      - kafka
+      - mongo
+    restart: on-failure
+    environment:
+     - KAFKA_HOST=kafka:9092
+     - TOPICS=fullfillment.inventory.customers,fullfillment.inventory.orders
+     - COLLECTION_NAME=customer_orders
+    networks:
+      network1:
+        aliases:
+          - anotherConsumer
+networks:
+    network1:
+        driver: bridge
